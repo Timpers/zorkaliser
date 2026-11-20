@@ -60,6 +60,8 @@ export const SaveLoadModal: React.FC<SaveLoadModalProps> = ({
       pendingFilePrompt.resolve({
         filename: `${slot.slotName}.sav`,
         bytes: slot.quetzalBytes,
+        roomMemory: slot.roomMemory,
+        mapGraph: slot.mapGraph,
       });
       setPendingFilePrompt(null);
       onClose();

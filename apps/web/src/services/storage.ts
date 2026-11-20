@@ -1,8 +1,8 @@
-import type { SceneAssetMetadata } from '@zorkaliser/shared';
+import type { GameMapGraph, SceneAssetMetadata } from '@zorkaliser/shared';
 import type { StoredRoomMemory } from '../engine/turnObserver.js';
 
 const DB_NAME = 'zorkaliser_db';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export interface SavedSlotRecord {
   id: string; // `${storyId}:${slotName}`
@@ -14,6 +14,7 @@ export interface SavedSlotRecord {
   stylePresetId: string;
   quetzalBytes: Uint8Array;
   roomMemory: StoredRoomMemory[];
+  mapGraph?: GameMapGraph;
 }
 
 export interface LocalSceneCacheRecord {
@@ -37,6 +38,9 @@ function openDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains('sceneCache')) {
         db.createObjectStore('sceneCache', { keyPath: 'cacheKey' });
+      }
+      if (!db.objectStoreNames.contains('maps')) {
+        db.createObjectStore('maps', { keyPath: 'storyId' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -122,6 +126,37 @@ export async function getL1SceneCache(cacheKey: string): Promise<SceneAssetMetad
     });
     db.close();
     return rec?.asset ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function putSavedMap(graph: GameMapGraph): Promise<void> {
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('maps', 'readwrite');
+      tx.objectStore('maps').put(graph);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+  } catch {
+    // ignore
+  }
+}
+
+export async function getSavedMap(storyId: string): Promise<GameMapGraph | null> {
+  try {
+    const db = await openDb();
+    const rec = await new Promise<GameMapGraph | undefined>((resolve, reject) => {
+      const tx = db.transaction('maps', 'readonly');
+      const req = tx.objectStore('maps').get(storyId);
+      req.onsuccess = () => resolve(req.result as GameMapGraph | undefined);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return rec ?? null;
   } catch {
     return null;
   }

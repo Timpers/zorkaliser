@@ -1,16 +1,26 @@
 import { create } from 'zustand';
-import type {
-  AspectRatio,
-  QualityTier,
-  ReactivityMode,
-  SceneAssetMetadata,
-  SceneDirectorOutput,
+import {
+  createEmptyMapGraph,
+  type AspectRatio,
+  type GameMapGraph,
+  type QualityTier,
+  type ReactivityMode,
+  type SceneAssetMetadata,
+  type SceneDirectorOutput,
 } from '@zorkaliser/shared';
 import type { RenderedParagraph } from '../engine/glkTypes.js';
 import type { StoryHeaderInfo } from '../engine/storyFingerprint.js';
+import type { StoredRoomMemory } from '../engine/turnObserver.js';
 
 export type ReaderTheme = 'midnight' | 'parchment' | 'sepia' | 'crt';
 export type ReaderFont = 'serif' | 'sans' | 'mono';
+export type LeftPaneMode = 'art' | 'split' | 'map';
+
+export interface AutoWalkStatus {
+  targetTitle: string;
+  remainingSteps: number;
+  notice?: string;
+}
 
 export interface ActiveStorySession {
   sessionId: string;
@@ -22,7 +32,14 @@ export interface ActiveStorySession {
 
 export interface PendingFilePrompt {
   mode: 'save' | 'restore';
-  resolve: (result: { filename: string; bytes?: Uint8Array } | null) => void;
+  resolve: (
+    result: {
+      filename: string;
+      bytes?: Uint8Array;
+      roomMemory?: StoredRoomMemory[];
+      mapGraph?: GameMapGraph;
+    } | null,
+  ) => void;
 }
 
 export interface GameState {
@@ -59,10 +76,15 @@ export interface GameState {
   readerFont: ReaderFont;
   fontSizePx: number;
   showVisualStage: boolean;
+  leftPaneMode: LeftPaneMode;
   pendingFilePrompt: PendingFilePrompt | null;
 
+  // Phase 2: Interactive Auto-Map
+  mapGraph: GameMapGraph | null;
+  autoWalkStatus: AutoWalkStatus | null;
+
   // Actions
-  startSession: (session: ActiveStorySession) => void;
+  startSession: (session: ActiveStorySession, initialMap?: GameMapGraph | null) => void;
   clearSession: () => void;
   setStatusLines: (lines: string[]) => void;
   appendParagraphs: (items: RenderedParagraph[], clear?: boolean) => void;
@@ -95,6 +117,10 @@ export interface GameState {
   selectGalleryScene: (asset: SceneAssetMetadata) => void;
   setVisualError: (err: string | null) => void;
   setPendingFilePrompt: (prompt: PendingFilePrompt | null) => void;
+  setLeftPaneMode: (mode: LeftPaneMode) => void;
+  setMapGraph: (graph: GameMapGraph | null) => void;
+  updateMapGraph: (updater: (current: GameMapGraph) => GameMapGraph) => void;
+  setAutoWalkStatus: (status: AutoWalkStatus | null) => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -127,9 +153,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   readerFont: 'serif',
   fontSizePx: 17,
   showVisualStage: true,
+  leftPaneMode: 'art',
   pendingFilePrompt: null,
+  mapGraph: null,
+  autoWalkStatus: null,
 
-  startSession: (session) =>
+  startSession: (session, initialMap) =>
     set({
       story: session,
       statusLines: [],
@@ -148,6 +177,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       generationMessage: '',
       activeJobId: null,
       visualError: null,
+      mapGraph: initialMap ?? createEmptyMapGraph(session.header.storyId),
+      autoWalkStatus: null,
     }),
 
   clearSession: () =>
@@ -160,6 +191,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       vmError: null,
       generationStage: 'idle',
       activeJobId: null,
+      mapGraph: null,
+      autoWalkStatus: null,
     }),
 
   setStatusLines: (lines) => set({ statusLines: lines }),
@@ -261,4 +294,16 @@ export const useGameStore = create<GameState>((set, get) => ({
     }),
 
   setPendingFilePrompt: (prompt) => set({ pendingFilePrompt: prompt }),
+
+  setLeftPaneMode: (mode) => set({ leftPaneMode: mode, showVisualStage: true }),
+
+  setMapGraph: (graph) => set({ mapGraph: graph }),
+
+  updateMapGraph: (updater) =>
+    set((state) => {
+      if (!state.mapGraph) return state;
+      return { mapGraph: updater(state.mapGraph) };
+    }),
+
+  setAutoWalkStatus: (status) => set({ autoWalkStatus: status }),
 }));

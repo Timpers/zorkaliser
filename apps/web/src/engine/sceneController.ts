@@ -4,9 +4,10 @@ import {
   regenerateScene,
   subscribeToSceneJob,
 } from '../services/apiClient.js';
-import { getL1SceneCache, putL1SceneCache } from '../services/storage.js';
+import { getL1SceneCache, putL1SceneCache, putSavedMap } from '../services/storage.js';
 import { useGameStore } from '../store/gameStore.js';
 import type { TurnSnapshot } from './glkTypes.js';
+import { applyDirectorHintsToMap, attachArtworkToMap } from './mapEngine.js';
 import { TurnObserver } from './turnObserver.js';
 
 /**
@@ -108,6 +109,11 @@ export class SceneController {
           } else if (event.type === 'completed') {
             void putL1SceneCache(event.asset);
             useGameStore.getState().applySceneAsset(event.asset);
+            useGameStore.getState().updateMapGraph((g) => {
+              const next = attachArtworkToMap(g, event.asset.locationKey, event.asset.imageUrl);
+              void putSavedMap(next);
+              return next;
+            });
             this.unsubscribeSse = null;
           } else if (event.type === 'failed') {
             useGameStore.getState().setVisualError(event.error);
@@ -187,9 +193,14 @@ export class SceneController {
 
       if (!this.observer.isLatestSequence(seq) || signal.aborted) return;
 
-      // Always record updated BRIEF-mode memory
+      // Always record updated BRIEF-mode memory and enrich Phase 2 Auto-Map with exit hints
       this.observer.recordDirectorResult(response.director);
       useGameStore.getState().setLastDirectorOutput(response.director);
+      useGameStore.getState().updateMapGraph((g) => {
+        const next = applyDirectorHintsToMap(g, response.director);
+        void putSavedMap(next);
+        return next;
+      });
 
       if (response.status === 'skipped') {
         useGameStore.getState().setGenerationStatus('idle', '', null);
@@ -199,6 +210,11 @@ export class SceneController {
       if (response.status === 'hit') {
         void putL1SceneCache(response.asset);
         useGameStore.getState().applySceneAsset(response.asset);
+        useGameStore.getState().updateMapGraph((g) => {
+          const next = attachArtworkToMap(g, response.asset.locationKey, response.asset.imageUrl);
+          void putSavedMap(next);
+          return next;
+        });
         return;
       }
 
@@ -207,6 +223,11 @@ export class SceneController {
         const l1 = await getL1SceneCache(response.cacheKey);
         if (l1 && this.observer.isLatestSequence(seq)) {
           useGameStore.getState().applySceneAsset({ ...l1, cacheHit: true });
+          useGameStore.getState().updateMapGraph((g) => {
+            const next = attachArtworkToMap(g, l1.locationKey, l1.imageUrl);
+            void putSavedMap(next);
+            return next;
+          });
           void cancelSceneJob(response.jobId);
           return;
         }
@@ -229,6 +250,11 @@ export class SceneController {
           } else if (event.type === 'completed') {
             void putL1SceneCache(event.asset);
             useGameStore.getState().applySceneAsset(event.asset);
+            useGameStore.getState().updateMapGraph((g) => {
+              const next = attachArtworkToMap(g, event.asset.locationKey, event.asset.imageUrl);
+              void putSavedMap(next);
+              return next;
+            });
             this.unsubscribeSse = null;
           } else if (event.type === 'failed') {
             useGameStore.getState().setVisualError(event.error);
