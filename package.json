@@ -1,0 +1,20 @@
+{
+  "name": "zorkaliser",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/shared",
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev --workspace=@zorkaliser/api\" \"npm run dev --workspace=@zorkaliser/web\"",
+    "build": "npm run build --workspace=@zorkaliser/shared && npm run build --workspace=@zorkaliser/api && npm run build --workspace=@zorkaliser/web",
+    "typecheck": "npm run typecheck --workspace=@zorkaliser/shared && npm run typecheck --workspace=@zorkaliser/api && npm run typecheck --workspace=@zorkaliser/web",
+    "test": "npm run test --workspace=@zorkaliser/api && npm run test --workspace=@zorkaliser/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.8.2"
+  }
+}
